@@ -38,19 +38,43 @@ app.get('/api/status', (req, res) => {
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/fifa2026';
 
+// mongoose
+//   .connect(MONGO_URI)
+//   .then(async () => {
+//     console.log('🔌 Connected to MongoDB Database.');
+    
+//     // Start Server
+//     app.listen(PORT, () => {
+//       console.log(`🚀 Express server running on port ${PORT}`);
+//       // Initialize WhatsApp client
+//       initWhatsApp();
+//     });
+//   })
+//   .catch((err) => {
+//     console.error('❌ Database connection failure:', err.message);
+//     process.exit(1);
+//   });
+
+
+  // Start Server independently so Render stays happy
+app.listen(PORT, () => {
+  console.log(`🚀 Express server running on port ${PORT}`);
+  
+  // Initialize WhatsApp client
+  try {
+    // initWhatsApp();
+  } catch (wsError) {
+    console.error('❌ WhatsApp Init Failed:', wsError.message);
+  }
+});
+
+// Connect to Database asynchronously in the background
 mongoose
   .connect(MONGO_URI)
-  .then(async () => {
+  .then(() => {
     console.log('🔌 Connected to MongoDB Database.');
-    
-    // Start Server
-    app.listen(PORT, () => {
-      console.log(`🚀 Express server running on port ${PORT}`);
-      // Initialize WhatsApp client
-      initWhatsApp();
-    });
   })
   .catch((err) => {
     console.error('❌ Database connection failure:', err.message);
-    process.exit(1);
+    // Removed process.exit(1) so the web process stays alive for Render
   });
