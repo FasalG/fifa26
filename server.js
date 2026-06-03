@@ -25,12 +25,23 @@ app.use('/api/auth', authRoutes);
 app.use('/api', predictionRoutes);
 app.use('/api/admin', adminRoutes);
 
+let dbError = null;
+
 // Root route for status check
 app.get('/api/status', (req, res) => {
+  const maskedUri = MONGO_URI
+    ? MONGO_URI.replace(/:([^@]+)@/, ':******@')
+    : null;
   res.json({
     status: 'online',
     timestamp: new Date(),
-    message: 'FIFA 2026 Office Prediction Game API'
+    message: 'FIFA 2026 Office Prediction Game API',
+    database: {
+      state: mongoose.connection.readyState,
+      stateName: ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState] || 'unknown',
+      uri: maskedUri,
+      error: dbError
+    }
   });
 });
 
@@ -73,8 +84,11 @@ mongoose
   .connect(MONGO_URI)
   .then(() => {
     console.log('🔌 Connected to MongoDB Database.');
+    dbError = null;
   })
   .catch((err) => {
     console.error('❌ Database connection failure:', err.message);
+    dbError = err.message;
     // Removed process.exit(1) so the web process stays alive for Render
   });
+
