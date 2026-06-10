@@ -250,7 +250,7 @@ const createFixture = async (req, res) => {
 // @access  Private/Admin
 const createTeam = async (req, res) => {
   try {
-    const { name, group } = req.body;
+    const { name, group, logo } = req.body;
     if (!name || !group) {
       return res.status(400).json({ message: 'Missing team name or group' });
     }
@@ -258,6 +258,7 @@ const createTeam = async (req, res) => {
     const team = await Team.create({
       name,
       group: group.toUpperCase(),
+      logo: logo || '',
       createdBy: req.user._id
     });
 
@@ -273,11 +274,12 @@ const createTeam = async (req, res) => {
 const updateTeam = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, group } = req.body;
+    const { name, group, logo } = req.body;
     const team = await Team.findOne({ _id: id, createdBy: req.user._id });
     if (!team) return res.status(404).json({ message: 'Team not found or not managed by you' });
     if (name) team.name = name;
     if (group) team.group = group.toUpperCase();
+    if (logo !== undefined) team.logo = logo;
     await team.save();
     res.json(team);
   } catch (error) {

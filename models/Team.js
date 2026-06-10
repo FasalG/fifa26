@@ -11,6 +11,10 @@ const TeamSchema = new mongoose.Schema({
     ref: 'Group',
     required: true
   },
+  logo: {
+    type: String,
+    default: ''
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
