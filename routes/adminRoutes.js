@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { 
-  settleMatch, 
-  createFixture, 
-  createTeam, 
-  updateTeam, 
-  deleteTeam, 
-  updateFixture, 
+const {
+  settleMatch,
+  createFixture,
+  createTeam,
+  updateTeam,
+  deleteTeam,
+  updateFixture,
   deleteFixture,
   createPlayer,
   getPlayers,
@@ -15,7 +15,8 @@ const {
   createGroup,
   getGroups,
   updateGroup,
-  deleteGroup
+  deleteGroup,
+  getFixturePredictions
 } = require('../controllers/adminController');
 const { protect, adminOnly } = require('../middleware/authMiddleware');
 
@@ -24,6 +25,7 @@ router.post('/settle-match', protect, adminOnly, settleMatch);
 router.post('/fixtures', protect, adminOnly, createFixture);
 router.put('/fixtures/:id', protect, adminOnly, updateFixture);
 router.delete('/fixtures/:id', protect, adminOnly, deleteFixture);
+router.get('/fixtures/:id/predictions', protect, adminOnly, getFixturePredictions);
 
 router.post('/teams', protect, adminOnly, createTeam);
 router.put('/teams/:id', protect, adminOnly, updateTeam);

@@ -517,6 +517,17 @@ const deleteGroup = async (req, res) => {
   }
 };
 
+const getFixturePredictions = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const predictions = await Prediction.find({ matchId: id }).populate('userId', 'username');
+    res.json(predictions);
+  } catch (error) {
+    console.error('Error fetching fixture predictions:', error);
+    res.status(500).json({ message: 'Server error fetching predictions', error: error.message });
+  }
+};
+
 module.exports = {
   settleMatch,
   createFixture,
@@ -532,5 +543,6 @@ module.exports = {
   createGroup,
   getGroups,
   updateGroup,
-  deleteGroup
+  deleteGroup,
+  getFixturePredictions
 };
