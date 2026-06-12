@@ -11,7 +11,7 @@ const recalculateTeamStandings = async (adminId) => {
     const teams = await Team.find({ createdBy: adminId });
     const teamStats = {};
     for (const team of teams) {
-      teamStats[team.name] = { points: 0, goalsScored: 0, played: 0, won: 0, lost: 0, draw: 0 };
+      teamStats[team.name] = { points: 0, goalsScored: 0, goalsConceded: 0, played: 0, won: 0, lost: 0, draw: 0 };
     }
 
     const completedFixtures = await Fixture.find({ status: 'Completed', createdBy: adminId });
@@ -24,12 +24,18 @@ const recalculateTeamStandings = async (adminId) => {
       if (teamStats[match.teamB] !== undefined) teamStats[match.teamB].played += 1;
 
       // Cumulative goals
-      if (teamStats[match.teamA] !== undefined) teamStats[match.teamA].goalsScored += sA;
-      if (teamStats[match.teamB] !== undefined) teamStats[match.teamB].goalsScored += sB;
+      if (teamStats[match.teamA] !== undefined) {
+        teamStats[match.teamA].goalsScored += sA;
+        teamStats[match.teamA].goalsConceded += sB;
+      }
+      if (teamStats[match.teamB] !== undefined) {
+        teamStats[match.teamB].goalsScored += sB;
+        teamStats[match.teamB].goalsConceded += sA;
+      }
 
       if (sA > sB) {
         if (teamStats[match.teamA] !== undefined) {
-          teamStats[match.teamA].points += 2;
+          teamStats[match.teamA].points += 3;
           teamStats[match.teamA].won += 1;
         }
         if (teamStats[match.teamB] !== undefined) {
@@ -37,7 +43,7 @@ const recalculateTeamStandings = async (adminId) => {
         }
       } else if (sB > sA) {
         if (teamStats[match.teamB] !== undefined) {
-          teamStats[match.teamB].points += 2;
+          teamStats[match.teamB].points += 3;
           teamStats[match.teamB].won += 1;
         }
         if (teamStats[match.teamA] !== undefined) {
@@ -61,6 +67,7 @@ const recalculateTeamStandings = async (adminId) => {
       if (stats) {
         team.points = stats.points;
         team.goalsScored = stats.goalsScored;
+        team.goalsConceded = stats.goalsConceded;
         team.played = stats.played;
         team.won = stats.won;
         team.lost = stats.lost;
