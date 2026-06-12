@@ -41,16 +41,11 @@ const FixtureSchema = new mongoose.Schema({
     type: String,
     enum: ['A', 'B', 'Tie', null],
     default: null
-  },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
   }
 }, {
   timestamps: true
 });
 
-FixtureSchema.index({ matchNumber: 1, createdBy: 1 }, { unique: true });
+FixtureSchema.index({ matchNumber: 1 }, { unique: true });
 
 module.exports = mongoose.model('Fixture', FixtureSchema);

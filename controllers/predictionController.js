@@ -9,15 +9,7 @@ const Group = require('../models/Group');
 // @access  Private
 const getFixtures = async (req, res) => {
   try {
-    let adminId = null;
-    if (req.user.role === 'admin') {
-      adminId = req.user._id;
-    } else if (req.user.role === 'player') {
-      adminId = req.user.createdBy;
-    }
-
-    const filter = adminId ? { createdBy: adminId } : { createdBy: { $exists: false } };
-    const fixtures = await Fixture.find(filter).sort({ matchNumber: 1 });
+    const fixtures = await Fixture.find({}).sort({ matchNumber: 1 });
     const predictions = await Prediction.find({ userId: req.user._id });
 
     // Map predictions by matchId for quick lookup
@@ -73,12 +65,7 @@ const submitPrediction = async (req, res) => {
       return res.status(404).json({ message: 'Fixture not found' });
     }
 
-    // Verify player is authorized to predict this fixture (belong to the same admin workspace)
-    const playerAdminId = req.user.createdBy ? req.user.createdBy.toString() : null;
-    const fixtureAdminId = fixture.createdBy ? fixture.createdBy.toString() : null;
-    if (playerAdminId !== fixtureAdminId) {
-      return res.status(403).json({ message: 'Access denied: this fixture belongs to another admin league' });
-    }
+    // Verified player can predict this global fixture
 
     // Check locking threshold: exactly 60 minutes before kickoff
     const now = new Date();
@@ -153,15 +140,7 @@ const getLeaderboard = async (req, res) => {
 // @access  Private
 const getTeams = async (req, res) => {
   try {
-    let adminId = null;
-    if (req.user.role === 'admin') {
-      adminId = req.user._id;
-    } else if (req.user.role === 'player') {
-      adminId = req.user.createdBy;
-    }
-
-    const filter = adminId ? { createdBy: adminId } : { createdBy: { $exists: false } };
-    const teams = await Team.find(filter).populate('group').sort({ name: 1 });
+    const teams = await Team.find({}).populate('group').sort({ name: 1 });
     res.json(teams);
   } catch (error) {
     console.error('Error fetching teams:', error);
@@ -171,15 +150,7 @@ const getTeams = async (req, res) => {
 
 const getGroups = async (req, res) => {
   try {
-    let adminId = null;
-    if (req.user.role === 'admin') {
-      adminId = req.user._id;
-    } else if (req.user.role === 'player') {
-      adminId = req.user.createdBy;
-    }
-
-    const filter = adminId ? { createdBy: adminId } : { createdBy: { $exists: false } };
-    const groups = await Group.find(filter).sort({ name: 1 });
+    const groups = await Group.find({}).sort({ name: 1 });
     res.json(groups);
   } catch (error) {
     console.error('Error fetching groups:', error);
@@ -201,8 +172,7 @@ const getChatbotResponse = async (req, res) => {
       adminId = req.user.createdBy;
     }
 
-    const filter = adminId ? { createdBy: adminId } : { createdBy: { $exists: false } };
-    const fixtures = await Fixture.find(filter).sort({ matchNumber: 1 }).lean();
+    const fixtures = await Fixture.find({}).sort({ matchNumber: 1 }).lean();
     
     let userFilter = { role: 'player' };
     if (adminId) {

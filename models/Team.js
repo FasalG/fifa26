@@ -15,11 +15,6 @@ const TeamSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
   points: {
     type: Number,
     default: 0
@@ -52,6 +47,6 @@ const TeamSchema = new mongoose.Schema({
   timestamps: true
 });
 
-TeamSchema.index({ name: 1, createdBy: 1 }, { unique: true });
+TeamSchema.index({ name: 1 }, { unique: true });
 
 module.exports = mongoose.model('Team', TeamSchema);

@@ -6,15 +6,15 @@ const Group = require('../models/Group');
 const { sendWhatsAppGroupAlert } = require('../services/whatsappService');
 
 // Helper to recalculate points and goals for all teams under an admin
-const recalculateTeamStandings = async (adminId) => {
+const recalculateTeamStandings = async () => {
   try {
-    const teams = await Team.find({ createdBy: adminId });
+    const teams = await Team.find({});
     const teamStats = {};
     for (const team of teams) {
       teamStats[team.name] = { points: 0, goalsScored: 0, goalsConceded: 0, played: 0, won: 0, lost: 0, draw: 0 };
     }
 
-    const completedFixtures = await Fixture.find({ status: 'Completed', createdBy: adminId });
+    const completedFixtures = await Fixture.find({ status: 'Completed' });
     for (const match of completedFixtures) {
       const sA = Number(match.scoreA || 0);
       const sB = Number(match.scoreB || 0);
@@ -91,9 +91,9 @@ const settleMatch = async (req, res) => {
       return res.status(400).json({ message: 'Please provide matchId, scoreA and scoreB' });
     }
 
-    const fixture = await Fixture.findOne({ _id: matchId, createdBy: req.user._id });
+    const fixture = await Fixture.findOne({ _id: matchId });
     if (!fixture) {
-      return res.status(404).json({ message: 'Fixture not found or not managed by you' });
+      return res.status(404).json({ message: 'Fixture not found' });
     }
 
     const actualScoreA = Number(scoreA);
@@ -152,8 +152,8 @@ const settleMatch = async (req, res) => {
       await prediction.save();
     }
 
-    // Update all users' total points from scratch (highly robust/failsafe approach, scoped to admin's players)
-    const players = await User.find({ role: 'player', createdBy: req.user._id });
+    // Update all users' total points from scratch globally because match is global
+    const players = await User.find({ role: 'player' });
     for (const player of players) {
       const userPredictions = await Prediction.find({ userId: player._id });
       const newTotalPoints = userPredictions.reduce((sum, p) => sum + (p.pointsEarned || 0), 0);
@@ -161,8 +161,8 @@ const settleMatch = async (req, res) => {
       await player.save();
     }
 
-    // Recalculate team points and goalsScored stats
-    await recalculateTeamStandings(req.user._id);
+    // Recalculate team points and goalsScored stats globally
+    await recalculateTeamStandings();
 
     // Fetch the updated Top 3 Leaderboard (scoped to admin's players)
     const leaderboard = await User.find({ role: 'player', createdBy: req.user._id })
@@ -229,11 +229,11 @@ const createFixture = async (req, res) => {
       return res.status(400).json({ message: 'Missing fixture parameters' });
     }
 
-    // Verify both teams belong to this admin's workspace
-    const teamAExists = await Team.findOne({ name: teamA, createdBy: req.user._id });
-    const teamBExists = await Team.findOne({ name: teamB, createdBy: req.user._id });
+    // Verify both teams exist
+    const teamAExists = await Team.findOne({ name: teamA });
+    const teamBExists = await Team.findOne({ name: teamB });
     if (!teamAExists || !teamBExists) {
-      return res.status(400).json({ message: 'Both teams must be registered under your admin profile' });
+      return res.status(400).json({ message: 'Both teams must be registered' });
     }
 
     const fixture = await Fixture.create({
@@ -242,8 +242,7 @@ const createFixture = async (req, res) => {
       teamB,
       matchTime: new Date(matchTime),
       venue: venue || '',
-      status: 'Upcoming',
-      createdBy: req.user._id
+      status: 'Upcoming'
     });
 
     res.status(201).json(fixture);
@@ -265,8 +264,7 @@ const createTeam = async (req, res) => {
     const team = await Team.create({
       name,
       group: group.toUpperCase(),
-      logo: logo || '',
-      createdBy: req.user._id
+      logo: logo || ''
     });
 
     res.status(201).json(team);
@@ -282,8 +280,8 @@ const updateTeam = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, group, logo } = req.body;
-    const team = await Team.findOne({ _id: id, createdBy: req.user._id });
-    if (!team) return res.status(404).json({ message: 'Team not found or not managed by you' });
+    const team = await Team.findOne({ _id: id });
+    if (!team) return res.status(404).json({ message: 'Team not found' });
     if (name) team.name = name;
     if (group) team.group = group.toUpperCase();
     if (logo !== undefined) team.logo = logo;
@@ -300,8 +298,8 @@ const updateTeam = async (req, res) => {
 const deleteTeam = async (req, res) => {
   try {
     const { id } = req.params;
-    const team = await Team.findOneAndDelete({ _id: id, createdBy: req.user._id });
-    if (!team) return res.status(404).json({ message: 'Team not found or not managed by you' });
+    const team = await Team.findOneAndDelete({ _id: id });
+    if (!team) return res.status(404).json({ message: 'Team not found' });
     res.json({ message: 'Team deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting team', error: error.message });
@@ -315,8 +313,8 @@ const updateFixture = async (req, res) => {
   try {
     const { id } = req.params;
     const { matchNumber, teamA, teamB, matchTime, venue, status } = req.body;
-    const fixture = await Fixture.findOne({ _id: id, createdBy: req.user._id });
-    if (!fixture) return res.status(404).json({ message: 'Fixture not found or not managed by you' });
+    const fixture = await Fixture.findOne({ _id: id });
+    if (!fixture) return res.status(404).json({ message: 'Fixture not found' });
     if (matchNumber !== undefined) fixture.matchNumber = matchNumber;
     if (teamA) fixture.teamA = teamA;
     if (teamB) fixture.teamB = teamB;
@@ -324,7 +322,7 @@ const updateFixture = async (req, res) => {
     if (venue !== undefined) fixture.venue = venue;
     if (status) fixture.status = status;
     await fixture.save();
-    await recalculateTeamStandings(req.user._id);
+    await recalculateTeamStandings();
     res.json(fixture);
   } catch (error) {
     res.status(500).json({ message: 'Error updating fixture', error: error.message });
@@ -337,10 +335,10 @@ const updateFixture = async (req, res) => {
 const deleteFixture = async (req, res) => {
   try {
     const { id } = req.params;
-    const fixture = await Fixture.findOneAndDelete({ _id: id, createdBy: req.user._id });
-    if (!fixture) return res.status(404).json({ message: 'Fixture not found or not managed by you' });
+    const fixture = await Fixture.findOneAndDelete({ _id: id });
+    if (!fixture) return res.status(404).json({ message: 'Fixture not found' });
     await Prediction.deleteMany({ matchId: id });
-    await recalculateTeamStandings(req.user._id);
+    await recalculateTeamStandings();
     res.json({ message: 'Fixture deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting fixture', error: error.message });
@@ -449,8 +447,7 @@ const createGroup = async (req, res) => {
     }
 
     const group = await Group.create({
-      name,
-      createdBy: req.user._id
+      name
     });
 
     res.status(201).json(group);
@@ -464,7 +461,7 @@ const createGroup = async (req, res) => {
 // @access  Private/Admin
 const getGroups = async (req, res) => {
   try {
-    const groups = await Group.find({ createdBy: req.user._id }).sort({ name: 1 });
+    const groups = await Group.find({}).sort({ name: 1 });
     res.json(groups);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching groups', error: error.message });
@@ -478,8 +475,8 @@ const updateGroup = async (req, res) => {
   try {
     const { id } = req.params;
     const { name } = req.body;
-    const group = await Group.findOne({ _id: id, createdBy: req.user._id });
-    if (!group) return res.status(404).json({ message: 'Group not found or not managed by you' });
+    const group = await Group.findOne({ _id: id });
+    if (!group) return res.status(404).json({ message: 'Group not found' });
     if (name) group.name = name;
     await group.save();
     res.json(group);
@@ -494,19 +491,18 @@ const updateGroup = async (req, res) => {
 const deleteGroup = async (req, res) => {
   try {
     const { id } = req.params;
-    const group = await Group.findOneAndDelete({ _id: id, createdBy: req.user._id });
-    if (!group) return res.status(404).json({ message: 'Group not found or not managed by you' });
+    const group = await Group.findOneAndDelete({ _id: id });
+    if (!group) return res.status(404).json({ message: 'Group not found' });
 
     // Find all teams under this group
-    const teams = await Team.find({ group: id, createdBy: req.user._id });
+    const teams = await Team.find({ group: id });
     const teamNames = teams.map(t => t.name);
 
     // Delete those teams
-    await Team.deleteMany({ group: id, createdBy: req.user._id });
+    await Team.deleteMany({ group: id });
 
     // Find and delete fixtures involving these teams
     const fixtures = await Fixture.find({
-      createdBy: req.user._id,
       $or: [
         { teamA: { $in: teamNames } },
         { teamB: { $in: teamNames } }
