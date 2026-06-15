@@ -54,6 +54,60 @@ const registerUser = async (req, res) => {
   }
 };
 
+// @desc    Register a new player under a specific admin
+// @route   POST /api/auth/register-player
+// @access  Public
+const registerPlayerUnderAdmin = async (req, res) => {
+  try {
+    const { username, email, password, adminEmail } = req.body;
+
+    if (!username || !email || !password || !adminEmail) {
+      return res.status(400).json({ message: 'Please provide all required fields including adminEmail' });
+    }
+
+    // Check if user exists
+    const userExists = await User.findOne({ 
+      $or: [{ email: email.toLowerCase() }, { username }] 
+    });
+
+    if (userExists) {
+      return res.status(400).json({ message: 'Username or email already exists' });
+    }
+
+    // Find the admin user
+    const adminUser = await User.findOne({ email: adminEmail.toLowerCase(), role: 'admin' });
+    if (!adminUser) {
+      return res.status(404).json({ message: 'Admin not found for the provided admin email' });
+    }
+
+    // Create player user under the admin
+    const user = await User.create({
+      username,
+      email: email.toLowerCase(),
+      password,
+      role: 'player',
+      createdBy: adminUser._id
+    });
+
+    if (user) {
+      res.status(201).json({
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        totalPoints: user.totalPoints,
+        createdBy: user.createdBy,
+        token: generateToken(user._id)
+      });
+    } else {
+      res.status(400).json({ message: 'Invalid user data' });
+    }
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ message: 'Server error during registration', error: error.message });
+  }
+};
+
 // @desc    Auth user & get token
 // @route   POST /api/auth/login
 // @access  Public
@@ -109,6 +163,7 @@ const getUserProfile = async (req, res) => {
 
 module.exports = {
   registerUser,
+  registerPlayerUnderAdmin,
   loginUser,
   getUserProfile
 };

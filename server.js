@@ -2,6 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const https = require('https');
+const fs = require('fs');
 const { initWhatsApp } = require('./services/whatsappService');
 
 // Import routes
@@ -69,7 +71,7 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/fifa2026';
 //   });
 
 
-  // Start Server independently so Render stays happy
+// Start HTTP Server
 app.listen(PORT, () => {
   console.log(`🚀 Express server running on port ${PORT}`);
   
@@ -80,6 +82,22 @@ app.listen(PORT, () => {
     console.error('❌ WhatsApp Init Failed:', wsError.message);
   }
 });
+
+// Start HTTPS Server if certs exist
+const HTTPS_PORT = process.env.HTTPS_PORT || 443;
+try {
+  if (fs.existsSync(__dirname + '/ssl/server.key') && fs.existsSync(__dirname + '/ssl/server.cert')) {
+    const options = {
+      key: fs.readFileSync(__dirname + '/ssl/server.key'),
+      cert: fs.readFileSync(__dirname + '/ssl/server.cert')
+    };
+    https.createServer(options, app).listen(HTTPS_PORT, () => {
+      console.log(`🔒 Express HTTPS server running on port ${HTTPS_PORT}`);
+    });
+  }
+} catch (e) {
+  console.log('HTTPS server not started: ' + e.message);
+}
 
 // Connect to Database asynchronously in the background
 mongoose
