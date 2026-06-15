@@ -177,8 +177,15 @@ const settleMatch = async (req, res) => {
 
     let leaderboardText = '';
     const medals = ['🥇', '🥈', '🥉'];
+    let currentRank = 0;
+    let lastPoints = -1;
     leaderboard.forEach((user, index) => {
-      leaderboardText += `${medals[index]} ${user.username}: ${user.totalPoints} pts\n`;
+      if (index === 0 || user.totalPoints !== lastPoints) {
+        currentRank++;
+      }
+      lastPoints = user.totalPoints;
+      const medal = medals[currentRank - 1] || '•';
+      leaderboardText += `${medal} ${user.username}: ${user.totalPoints} pts\n`;
     });
     if (leaderboard.length === 0) {
       leaderboardText = 'No players registered yet.\n';

@@ -297,11 +297,80 @@ Tone Guidelines:
   }
 };
 
+// @desc    Get prediction history for a specific player (visible to others once locked)
+// @route   GET /api/leaderboard/:userId/predictions
+// @access  Private
+const getUserPredictionsHistory = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const targetUser = await User.findById(userId);
+    if (!targetUser || targetUser.role !== 'player') {
+      return res.status(404).json({ message: 'Player not found' });
+    }
+
+    // Tenant check: ensure current user and target user share the same admin
+    let currentAdminId = null;
+    if (req.user.role === 'admin') {
+      currentAdminId = req.user._id;
+    } else if (req.user.role === 'player') {
+      currentAdminId = req.user.createdBy;
+    }
+
+    const targetAdminId = targetUser.createdBy;
+    const currentAdminStr = currentAdminId ? currentAdminId.toString() : '';
+    const targetAdminStr = targetAdminId ? targetAdminId.toString() : '';
+    if (currentAdminStr !== targetAdminStr) {
+      return res.status(403).json({ message: 'Access denied to this player standings' });
+    }
+
+    // Fetch predictions populated with matchDetails
+    const predictions = await Prediction.find({ userId }).populate('matchId');
+
+    const now = new Date();
+    const LOCK_BUFFER_MS = 60 * 60 * 1000; // 60 minutes
+
+    // Filter predictions to only those that are locked/completed
+    const filteredPredictions = predictions.filter(p => {
+      const fixture = p.matchId;
+      if (!fixture) return false;
+      const matchDate = new Date(fixture.matchTime);
+      const msUntilMatch = matchDate.getTime() - now.getTime();
+      const isLocked = msUntilMatch <= LOCK_BUFFER_MS || fixture.status !== 'Upcoming';
+      return isLocked;
+    });
+
+    const history = filteredPredictions.map(p => {
+      const fixture = p.matchId;
+      return {
+        _id: p._id,
+        matchNumber: fixture.matchNumber,
+        teamA: fixture.teamA,
+        teamB: fixture.teamB,
+        matchTime: fixture.matchTime,
+        status: fixture.status,
+        actualScoreA: fixture.scoreA,
+        actualScoreB: fixture.scoreB,
+        predScoreA: p.predScoreA,
+        predScoreB: p.predScoreB,
+        pointsEarned: p.pointsEarned,
+        timestamp: p.timestamp
+      };
+    }).sort((a, b) => a.matchNumber - b.matchNumber);
+
+    res.json(history);
+  } catch (error) {
+    console.error('Error fetching user prediction history:', error);
+    res.status(500).json({ message: 'Server error fetching prediction history', error: error.message });
+  }
+};
+
 module.exports = {
   getFixtures,
   submitPrediction,
   getLeaderboard,
   getTeams,
   getGroups,
-  getChatbotResponse
+  getChatbotResponse,
+  getUserPredictionsHistory
 };
