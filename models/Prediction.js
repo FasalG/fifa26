@@ -21,6 +21,14 @@ const PredictionSchema = new mongoose.Schema({
     required: true,
     min: 0
   },
+  predPenaltyScoreA: {
+    type: Number,
+    default: null
+  },
+  predPenaltyScoreB: {
+    type: Number,
+    default: null
+  },
   pointsEarned: {
     type: Number,
     default: 0

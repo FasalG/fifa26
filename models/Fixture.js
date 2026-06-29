@@ -41,6 +41,18 @@ const FixtureSchema = new mongoose.Schema({
     type: String,
     enum: ['A', 'B', 'Tie', null],
     default: null
+  },
+  penaltyScoreA: {
+    type: Number,
+    default: null
+  },
+  penaltyScoreB: {
+    type: Number,
+    default: null
+  },
+  isKnockout: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true

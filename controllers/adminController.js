@@ -80,12 +80,88 @@ const recalculateTeamStandings = async () => {
   }
 };
 
+const advanceFixtureWinner = async (fixture, winnerTeam, loserTeam) => {
+  const matchNum = fixture.matchNumber;
+  let targetMatchNum = null;
+  let isTeamA = true;
+  let loserTargetMatchNum = null;
+  let isLoserTeamA = true;
+
+  // Round of 32 (73-88) -> Round of 16 (89-96)
+  if (matchNum === 73) { targetMatchNum = 89; isTeamA = true; }
+  else if (matchNum === 75) { targetMatchNum = 89; isTeamA = false; }
+  else if (matchNum === 74) { targetMatchNum = 90; isTeamA = true; }
+  else if (matchNum === 77) { targetMatchNum = 90; isTeamA = false; }
+  else if (matchNum === 76) { targetMatchNum = 91; isTeamA = true; }
+  else if (matchNum === 79) { targetMatchNum = 91; isTeamA = false; }
+  else if (matchNum === 78) { targetMatchNum = 92; isTeamA = true; }
+  else if (matchNum === 80) { targetMatchNum = 92; isTeamA = false; }
+  else if (matchNum === 81) { targetMatchNum = 93; isTeamA = true; }
+  else if (matchNum === 83) { targetMatchNum = 93; isTeamA = false; }
+  else if (matchNum === 82) { targetMatchNum = 94; isTeamA = true; }
+  else if (matchNum === 84) { targetMatchNum = 94; isTeamA = false; }
+  else if (matchNum === 85) { targetMatchNum = 95; isTeamA = true; }
+  else if (matchNum === 87) { targetMatchNum = 95; isTeamA = false; }
+  else if (matchNum === 86) { targetMatchNum = 96; isTeamA = true; }
+  else if (matchNum === 88) { targetMatchNum = 96; isTeamA = false; }
+
+  // Round of 16 (89-96) -> Quarter-finals (97-100)
+  else if (matchNum === 89) { targetMatchNum = 97; isTeamA = true; }
+  else if (matchNum === 90) { targetMatchNum = 97; isTeamA = false; }
+  else if (matchNum === 93) { targetMatchNum = 98; isTeamA = true; }
+  else if (matchNum === 94) { targetMatchNum = 98; isTeamA = false; }
+  else if (matchNum === 91) { targetMatchNum = 99; isTeamA = true; }
+  else if (matchNum === 92) { targetMatchNum = 99; isTeamA = false; }
+  else if (matchNum === 95) { targetMatchNum = 100; isTeamA = true; }
+  else if (matchNum === 96) { targetMatchNum = 100; isTeamA = false; }
+
+  // Quarter-finals (97-100) -> Semi-finals (101-102)
+  else if (matchNum === 97) { targetMatchNum = 101; isTeamA = true; }
+  else if (matchNum === 98) { targetMatchNum = 101; isTeamA = false; }
+  else if (matchNum === 99) { targetMatchNum = 102; isTeamA = true; }
+  else if (matchNum === 100) { targetMatchNum = 102; isTeamA = false; }
+
+  // Semi-finals (101-102) -> Final (104) and Third-place (103)
+  else if (matchNum === 101) {
+    targetMatchNum = 104; isTeamA = true;
+    loserTargetMatchNum = 103; isLoserTeamA = true;
+  }
+  else if (matchNum === 102) {
+    targetMatchNum = 104; isTeamA = false;
+    loserTargetMatchNum = 103; isLoserTeamA = false;
+  }
+
+  if (targetMatchNum) {
+    const targetFixture = await Fixture.findOne({ matchNumber: targetMatchNum });
+    if (targetFixture) {
+      if (isTeamA) {
+        targetFixture.teamA = winnerTeam;
+      } else {
+        targetFixture.teamB = winnerTeam;
+      }
+      await targetFixture.save();
+    }
+  }
+
+  if (loserTargetMatchNum && loserTeam) {
+    const loserTargetFixture = await Fixture.findOne({ matchNumber: loserTargetMatchNum });
+    if (loserTargetFixture) {
+      if (isLoserTeamA) {
+        loserTargetFixture.teamA = loserTeam;
+      } else {
+        loserTargetFixture.teamB = loserTeam;
+      }
+      await loserTargetFixture.save();
+    }
+  }
+};
+
 // @desc    Settle a match score and calculate user points
 // @route   POST /api/admin/settle-match
 // @access  Private/Admin
 const settleMatch = async (req, res) => {
   try {
-    const { matchId, scoreA, scoreB } = req.body;
+    const { matchId, scoreA, scoreB, penaltyScoreA, penaltyScoreB } = req.body;
 
     if (matchId === undefined || scoreA === undefined || scoreB === undefined) {
       return res.status(400).json({ message: 'Please provide matchId, scoreA and scoreB' });
@@ -98,18 +174,41 @@ const settleMatch = async (req, res) => {
 
     const actualScoreA = Number(scoreA);
     const actualScoreB = Number(scoreB);
+    const actPenaltyA = penaltyScoreA !== undefined && penaltyScoreA !== null ? Number(penaltyScoreA) : null;
+    const actPenaltyB = penaltyScoreB !== undefined && penaltyScoreB !== null ? Number(penaltyScoreB) : null;
 
     // Determine actual winner
     let actualWinner = 'Tie';
+    let advancingWinner = null;
+    let advancingLoser = null;
+
     if (actualScoreA > actualScoreB) {
       actualWinner = 'A';
+      advancingWinner = fixture.teamA;
+      advancingLoser = fixture.teamB;
     } else if (actualScoreB > actualScoreA) {
       actualWinner = 'B';
+      advancingWinner = fixture.teamB;
+      advancingLoser = fixture.teamA;
+    } else {
+      // It's a draw at full time
+      actualWinner = 'Tie';
+      if (fixture.isKnockout && actPenaltyA !== null && actPenaltyB !== null) {
+        if (actPenaltyA > actPenaltyB) {
+          advancingWinner = fixture.teamA;
+          advancingLoser = fixture.teamB;
+        } else if (actPenaltyB > actPenaltyA) {
+          advancingWinner = fixture.teamB;
+          advancingLoser = fixture.teamA;
+        }
+      }
     }
 
     // Update match details
     fixture.scoreA = actualScoreA;
     fixture.scoreB = actualScoreB;
+    fixture.penaltyScoreA = actPenaltyA;
+    fixture.penaltyScoreB = actPenaltyB;
     fixture.winner = actualWinner;
     fixture.status = 'Completed';
     await fixture.save();
@@ -120,11 +219,14 @@ const settleMatch = async (req, res) => {
     let exactCount = 0;
     let outcomeCount = 0;
     let incorrectCount = 0;
+    let exactPenaltyCount = 0;
 
     // Process predictions and assign points
     for (const prediction of predictions) {
       const predA = prediction.predScoreA;
       const predB = prediction.predScoreB;
+      const predPenA = prediction.predPenaltyScoreA;
+      const predPenB = prediction.predPenaltyScoreB;
 
       // Determine predicted winner
       let predWinner = 'Tie';
@@ -136,9 +238,23 @@ const settleMatch = async (req, res) => {
 
       let pointsEarned = 0;
 
-      // Rule: +30 for exact scoreline, +10 for correct outcome, 0 otherwise
+      // Scoring Rules:
+      // 1. Exact full-time scoreline:
+      //    a. If knockout match, ended in tie, and predicted exact penalties: +60 points
+      //    b. Else (exact full-time score, or incorrect penalties): +30 points
+      // 2. Correct outcome (win/loss/draw of full-time): +10 points
+      // 3. Otherwise: 0 points
       if (predA === actualScoreA && predB === actualScoreB) {
-        pointsEarned = 30;
+        if (fixture.isKnockout && actualScoreA === actualScoreB && actPenaltyA !== null && actPenaltyB !== null) {
+          if (predPenA === actPenaltyA && predPenB === actPenaltyB) {
+            pointsEarned = 60;
+            exactPenaltyCount++;
+          } else {
+            pointsEarned = 30;
+          }
+        } else {
+          pointsEarned = 30;
+        }
         exactCount++;
       } else if (predWinner === actualWinner) {
         pointsEarned = 10;
@@ -164,6 +280,11 @@ const settleMatch = async (req, res) => {
     // Recalculate team points and goalsScored stats globally
     await recalculateTeamStandings();
 
+    // Advance team to next knockout stage if applicable
+    if (fixture.isKnockout && advancingWinner) {
+      await advanceFixtureWinner(fixture, advancingWinner, advancingLoser);
+    }
+
     // Fetch the updated Top 3 Leaderboard (scoped to admin's players)
     const leaderboard = await User.find({ role: 'player', createdBy: req.user._id })
       .sort({ totalPoints: -1, username: 1 })
@@ -174,6 +295,10 @@ const settleMatch = async (req, res) => {
     let winnerDisplay = 'Tie 🤝';
     if (actualWinner === 'A') winnerDisplay = `${fixture.teamA} Win 🔴`;
     if (actualWinner === 'B') winnerDisplay = `${fixture.teamB} Win 🔵`;
+    if (actualWinner === 'Tie' && fixture.isKnockout && actPenaltyA !== null && actPenaltyB !== null) {
+      const penWin = actPenaltyA > actPenaltyB ? fixture.teamA : fixture.teamB;
+      winnerDisplay = `Draw (${fixture.teamA} ${actualScoreA}-${actualScoreB} ${fixture.teamB}), ${penWin} wins on penalties (${actPenaltyA}-${actPenaltyB}) 🏆`;
+    }
 
     let leaderboardText = '';
     const medals = ['🥇', '🥈', '🥉'];
@@ -195,11 +320,12 @@ const settleMatch = async (req, res) => {
 ---------------------------------------------
 🏆 *Match Settled!*
 *Fixture:* ${fixture.teamA} vs ${fixture.teamB} (Match #${fixture.matchNumber})
-*Full Time Score:* ${fixture.teamA} ${actualScoreA} - ${actualScoreB} ${fixture.teamB}
+*Full Time Score:* ${fixture.teamA} ${actualScoreA} - ${actualScoreB} ${fixture.teamB}${fixture.isKnockout && actualScoreA === actualScoreB && actPenaltyA !== null ? ` (Pens: ${actPenaltyA}-${actPenaltyB})` : ''}
 *Outcome:* ${winnerDisplay}
 
 📊 *Match Predictions Stats:*
-- Exact Scorelines (+30 pts): ${exactCount}
+- Exact Penalty Score (+60 pts): ${exactPenaltyCount}
+- Exact Scorelines (+30 pts): ${exactCount - exactPenaltyCount}
 - Correct Outcomes (+10 pts): ${outcomeCount}
 - Incorrect (+0 pts): ${incorrectCount}
 
@@ -215,6 +341,7 @@ Keep predicting and climb the charts! 🏆🔥`;
       fixture,
       stats: {
         exactCount,
+        exactPenaltyCount,
         outcomeCount,
         incorrectCount
       },
@@ -538,6 +665,162 @@ const getFixturePredictions = async (req, res) => {
   }
 };
 
+// @desc    Generate/sync knockout fixtures automatically from Gemini API with search grounding
+// @route   POST /api/admin/generate-knockout
+// @access  Private/Admin
+const generateKnockoutFixtures = async (req, res) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ message: 'AI service configuration error: missing API key' });
+    }
+
+    const systemPrompt = `You are an expert sports data analyst. Use Google Search to find the exact match schedule for the FIFA World Cup 2026 knockout stage (matches 73 to 104).
+You must return a JSON array of objects representing the matches.
+Each object must have:
+- matchNumber: number (73 to 104)
+- teamA: string (e.g. "South Africa" or "Winner Group A")
+- teamB: string (e.g. "Canada" or "Runner-up Group B")
+- matchTime: string (ISO 8601 format, e.g. "2026-06-28T22:00:00Z")
+- venue: string (e.g. "Los Angeles Stadium")
+
+Ensure you cover matches 73 to 104. For Round of 32 (73-88), use the actual teams if they are already determined (e.g. South Africa vs Canada, Germany vs Paraguay, Netherlands vs Morocco, Brazil vs Japan, France vs Sweden, Ivory Coast vs Norway, Mexico vs Ecuador, England vs DR Congo, USA vs Bosnia and Herzegovina, Belgium vs Senegal, Portugal vs Croatia, Spain vs Austria, Switzerland vs Algeria, Argentina vs Cape Verde, Colombia vs Ghana, Australia vs Egypt). For subsequent rounds (89-104), use the correct tournament bracket placeholders (e.g., "Winner Match 73" or "Winner Match 74").
+Return only the raw JSON. Do not include markdown code block syntax. Just the JSON text.`;
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: "Fetch and return the FIFA World Cup 2026 knockout stage matches 73 to 104 schedule as JSON." }]
+          }
+        ],
+        systemInstruction: {
+          parts: [{ text: systemPrompt }]
+        },
+        tools: [
+          {
+            google_search: {}
+          }
+        ],
+        generationConfig: {
+          temperature: 0.1
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('Gemini API error during knockout generation:', errText);
+      return res.status(502).json({ message: 'Error communicating with AI service to fetch matches' });
+    }
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) {
+      return res.status(502).json({ message: 'Empty response received from AI service' });
+    }
+
+    const startIdx = text.indexOf('[');
+    const endIdx = text.lastIndexOf(']');
+    if (startIdx === -1 || endIdx === -1) {
+      console.error('Could not find JSON array in response text:', text);
+      return res.status(502).json({ message: 'Invalid response format from AI service' });
+    }
+
+    const jsonStr = text.substring(startIdx, endIdx + 1);
+    const matches = JSON.parse(jsonStr);
+
+    const correctTimes = {
+      73: { time: "2026-06-28T19:00:00.000Z", venue: "Los Angeles Stadium" },
+      74: { time: "2026-06-29T20:30:00.000Z", venue: "Boston Stadium" },
+      75: { time: "2026-06-30T01:00:00.000Z", venue: "Estadio Monterrey" },
+      76: { time: "2026-06-29T17:00:00.000Z", venue: "Houston Stadium" },
+      77: { time: "2026-06-30T18:00:00.000Z", venue: "New York New Jersey Stadium" },
+      78: { time: "2026-06-30T15:00:00.000Z", venue: "Dallas Stadium" },
+      79: { time: "2026-06-30T23:00:00.000Z", venue: "Mexico City Stadium" },
+      80: { time: "2026-07-01T16:00:00.000Z", venue: "Atlanta Stadium" },
+      81: { time: "2026-07-02T00:00:00.000Z", venue: "San Francisco Bay Area Stadium" },
+      82: { time: "2026-07-01T20:00:00.000Z", venue: "Seattle Stadium" },
+      83: { time: "2026-07-02T23:00:00.000Z", venue: "Toronto Stadium" },
+      84: { time: "2026-07-02T19:00:00.000Z", venue: "Los Angeles Stadium" },
+      85: { time: "2026-07-03T03:00:00.000Z", venue: "Vancouver Stadium" },
+      86: { time: "2026-07-03T22:00:00.000Z", venue: "Miami Stadium" },
+      87: { time: "2026-07-04T01:30:00.000Z", venue: "Houston Stadium" },
+      88: { time: "2026-07-03T18:00:00.000Z", venue: "Philadelphia Stadium" },
+      89: { time: "2026-07-05T01:00:00.000Z", venue: "Philadelphia Stadium" },
+      90: { time: "2026-07-04T21:00:00.000Z", venue: "Houston Stadium" },
+      91: { time: "2026-07-06T00:00:00.000Z", venue: "New York New Jersey Stadium" },
+      92: { time: "2026-07-06T04:00:00.000Z", venue: "Mexico City Stadium" },
+      93: { time: "2026-07-06T23:00:00.000Z", venue: "Dallas Stadium" },
+      94: { time: "2026-07-07T04:00:00.000Z", venue: "Seattle Stadium" },
+      95: { time: "2026-07-07T20:00:00.000Z", venue: "Atlanta Stadium" },
+      96: { time: "2026-07-09T00:00:00.000Z", venue: "Vancouver Stadium" },
+      97: { time: "2026-07-09T20:00:00.000Z", venue: "Gillette Stadium" },
+      98: { time: "2026-07-10T19:00:00.000Z", venue: "SoFi Stadium" },
+      99: { time: "2026-07-11T21:00:00.000Z", venue: "Hard Rock Stadium" },
+      100: { time: "2026-07-12T01:00:00.000Z", venue: "Arrowhead Stadium" },
+      101: { time: "2026-07-14T23:00:00.000Z", venue: "Dallas Stadium" },
+      102: { time: "2026-07-15T23:00:00.000Z", venue: "Atlanta Stadium" },
+      103: { time: "2026-07-18T21:00:00.000Z", venue: "Miami Stadium" },
+      104: { time: "2026-07-19T19:00:00.000Z", venue: "New York New Jersey Stadium" }
+    };
+
+    let createdCount = 0;
+    let updatedCount = 0;
+
+    for (const match of matches) {
+      if (!match.matchNumber || !match.teamA || !match.teamB) {
+        continue;
+      }
+
+      const staticData = correctTimes[match.matchNumber];
+      const matchTime = staticData ? new Date(staticData.time) : new Date(match.matchTime);
+      const venue = staticData ? staticData.venue : (match.venue || '');
+
+      const existing = await Fixture.findOne({ matchNumber: match.matchNumber });
+      if (!existing) {
+        await Fixture.create({
+          matchNumber: match.matchNumber,
+          teamA: match.teamA,
+          teamB: match.teamB,
+          matchTime,
+          venue,
+          isKnockout: true,
+          status: 'Upcoming'
+        });
+        createdCount++;
+      } else {
+        if (existing.status === 'Upcoming') {
+          existing.teamA = match.teamA;
+          existing.teamB = match.teamB;
+          existing.matchTime = matchTime;
+          existing.venue = venue;
+          existing.isKnockout = true;
+          await existing.save();
+          updatedCount++;
+        }
+      }
+    }
+
+    res.json({
+      message: 'Knockout fixtures generated and synced successfully',
+      createdCount,
+      updatedCount
+    });
+
+  } catch (error) {
+    console.error('Error generating knockout fixtures:', error);
+    res.status(500).json({ message: 'Server error generating knockout fixtures', error: error.message });
+  }
+};
+
 module.exports = {
   settleMatch,
   createFixture,
@@ -554,5 +837,6 @@ module.exports = {
   getGroups,
   updateGroup,
   deleteGroup,
-  getFixturePredictions
+  getFixturePredictions,
+  generateKnockoutFixtures
 };

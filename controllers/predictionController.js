@@ -24,7 +24,9 @@ const getFixtures = async (req, res) => {
     const enrichedFixtures = fixtures.map(fixture => {
       const matchDate = new Date(fixture.matchTime);
       const msUntilMatch = matchDate.getTime() - now.getTime();
-      const isLocked = msUntilMatch <= LOCK_BUFFER_MS || fixture.status !== 'Upcoming';
+      const oneHourInMs = 60 * 60 * 1000;
+      const twentyFourHoursInMs = 24 * 60 * 60 * 1000;
+      const isLocked = fixture.status !== 'Upcoming' || msUntilMatch < oneHourInMs || msUntilMatch > twentyFourHoursInMs;
 
       return {
         _id: fixture._id,
@@ -37,6 +39,9 @@ const getFixtures = async (req, res) => {
         scoreA: fixture.scoreA,
         scoreB: fixture.scoreB,
         winner: fixture.winner,
+        penaltyScoreA: fixture.penaltyScoreA,
+        penaltyScoreB: fixture.penaltyScoreB,
+        isKnockout: fixture.isKnockout || false,
         isLocked,
         myPrediction: predictionMap[fixture._id.toString()] || null
       };
@@ -54,7 +59,7 @@ const getFixtures = async (req, res) => {
 // @access  Private
 const submitPrediction = async (req, res) => {
   try {
-    const { matchId, predScoreA, predScoreB } = req.body;
+    const { matchId, predScoreA, predScoreB, predPenaltyScoreA, predPenaltyScoreB } = req.body;
 
     if (matchId === undefined || predScoreA === undefined || predScoreB === undefined) {
       return res.status(400).json({ message: 'Please provide matchId, predScoreA and predScoreB' });
@@ -65,17 +70,22 @@ const submitPrediction = async (req, res) => {
       return res.status(404).json({ message: 'Fixture not found' });
     }
 
-    // Verified player can predict this global fixture
-
-    // Check locking threshold: exactly 60 minutes before kickoff
+    // Check locking threshold: between 24 hours and 1 hour before kickoff
     const now = new Date();
     const matchTime = new Date(fixture.matchTime);
     const msUntilMatch = matchTime.getTime() - now.getTime();
-    const LOCK_BUFFER_MS = 60 * 60 * 1000; // 60 minutes
+    const oneHourInMs = 60 * 60 * 1000;
+    const twentyFourHoursInMs = 24 * 60 * 60 * 1000;
 
-    if (msUntilMatch < LOCK_BUFFER_MS) {
+    if (msUntilMatch < oneHourInMs) {
       return res.status(400).json({ 
-        message: 'Predictions lock exactly 60 minutes prior to kickoff' 
+        message: 'Predictions locked (kickoff is within 1 hour)' 
+      });
+    }
+
+    if (msUntilMatch > twentyFourHoursInMs) {
+      return res.status(400).json({
+        message: 'Predictions not open yet (kickoff is more than 24 hours away)'
       });
     }
 
@@ -85,14 +95,28 @@ const submitPrediction = async (req, res) => {
       });
     }
 
+    const updateData = {
+      predScoreA: Number(predScoreA), 
+      predScoreB: Number(predScoreB),
+      timestamp: now
+    };
+
+    // If it's a knockout and predicted scores are equal, require and save penalty predictions
+    if (fixture.isKnockout && Number(predScoreA) === Number(predScoreB)) {
+      if (predPenaltyScoreA === undefined || predPenaltyScoreB === undefined || predPenaltyScoreA === null || predPenaltyScoreB === null) {
+        return res.status(400).json({ message: 'Please predict penalty shootout scores for a draw match' });
+      }
+      updateData.predPenaltyScoreA = Number(predPenaltyScoreA);
+      updateData.predPenaltyScoreB = Number(predPenaltyScoreB);
+    } else {
+      updateData.predPenaltyScoreA = null;
+      updateData.predPenaltyScoreB = null;
+    }
+
     // Upsert prediction
     const prediction = await Prediction.findOneAndUpdate(
       { userId: req.user._id, matchId },
-      { 
-        predScoreA: Number(predScoreA), 
-        predScoreB: Number(predScoreB),
-        timestamp: now
-      },
+      updateData,
       { new: true, upsert: true }
     );
 
@@ -351,8 +375,13 @@ const getUserPredictionsHistory = async (req, res) => {
         status: fixture.status,
         actualScoreA: fixture.scoreA,
         actualScoreB: fixture.scoreB,
+        penaltyScoreA: fixture.penaltyScoreA,
+        penaltyScoreB: fixture.penaltyScoreB,
         predScoreA: p.predScoreA,
         predScoreB: p.predScoreB,
+        predPenaltyScoreA: p.predPenaltyScoreA,
+        predPenaltyScoreB: p.predPenaltyScoreB,
+        isKnockout: fixture.isKnockout || false,
         pointsEarned: p.pointsEarned,
         timestamp: p.timestamp
       };

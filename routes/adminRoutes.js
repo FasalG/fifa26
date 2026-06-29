@@ -16,11 +16,13 @@ const {
   getGroups,
   updateGroup,
   deleteGroup,
-  getFixturePredictions
+  getFixturePredictions,
+  generateKnockoutFixtures
 } = require('../controllers/adminController');
 const { protect, adminOnly } = require('../middleware/authMiddleware');
 
 router.post('/settle-match', protect, adminOnly, settleMatch);
+router.post('/generate-knockout', protect, adminOnly, generateKnockoutFixtures);
 
 router.post('/fixtures', protect, adminOnly, createFixture);
 router.put('/fixtures/:id', protect, adminOnly, updateFixture);
